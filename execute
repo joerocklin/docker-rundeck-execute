@@ -1,0 +1,30 @@
+#!/bin/sh
+
+if [[ "x$DEBUG" == "xtrue" ]]; then
+  set -x
+fi
+
+if [ -z $RUNDECK_URL ]; then echo "RUNDECK_URL undefined"; exit 1; fi
+if [ -z $RUNDECK_JOB_ID ]; then echo "RUNDECK_JOB_ID undefined"; exit 2; fi
+if [ -z $RUNDECK_TOKEN ]; then echo "RUNDECK_TOKEN undefined"; exit 3; fi
+
+JOB_OPTIONS=${RUNDECK_JOB_OPTIONS-"{}"}
+
+EXEC_ID=`curl -s -XPOST -H "Content-Type: application/json" -k ${RUNDECK_URL}/api/14/job/${RUNDECK_JOB_ID}/run\?authtoken\=${RUNDECK_TOKEN} -d ${JOB_OPTIONS} | sed -rn "s/.*execution id='([0-9]+)'.*/\1/p"`
+
+export EXEC_STATE=`curl -s -k ${RUNDECK_URL}/api/1/execution/${EXEC_ID}\?authtoken\=${RUNDECK_TOKEN} | sed -rn "s/.*status='([a-z]+)'.*/\1/p"`
+
+while [[ $EXEC_STATE == 'running' ]]; do 
+  sleep 1
+  echo -n .
+  export EXEC_STATE=`curl -s -k ${RUNDECK_URL}/api/1/execution/${EXEC_ID}\?authtoken\=${RUNDECK_TOKEN} | sed -rn "s/.*status='([a-z]+)'.*/\1/p"`
+done; 
+
+echo
+echo Execution Output:
+
+curl -s -k ${RUNDECK_URL}/api/5/execution/${EXEC_ID}/output\?authtoken\=${RUNDECK_TOKEN}\&format\=text
+
+echo Execution ${EXEC_STATE}
+
+if [[ $EXEC_STATE != 'succeeded' ]]; then exit 4; fi
